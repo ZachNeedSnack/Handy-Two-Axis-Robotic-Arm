@@ -1,0 +1,81 @@
+#include <ESP32Servo.h>
+
+Servo baseServo;  // Initialize baseServo object
+Servo beltServo;  // Initialize beltServo object
+
+void setup() {
+
+  ESP32PWM::allocateTimer(0); // Setup timer 0 in ESP32
+  ESP32PWM::allocateTimer(1); // Setup timer 1 in ESP32
+  ESP32PWM::allocateTimer(2); // Setup timer 2 in ESP32
+  ESP32PWM::allocateTimer(3); // Setup timer 3 in ESP32
+
+  baseServo.setPeriodHertz(50); // 50Hz PWM period
+  baseServo.attach(17, 500, 2400); // Attach PIN 17 to the next free channel between 500 and 2400
+
+  beltServo.setPeriodHertz(50); // 50Hz PWM period
+  beltServo.attach(18, 500, 2400); // Attach PIN 17 to the next free channel between 500 and 2400
+
+  Serial.begin(9600); // Set baudrate at 9600
+}
+
+void loop() {
+
+  int newAngle = receiveAngles(); // Recieves incoming angle sent from GUI
+  if (newAngle >= 0 && newAngle != 360360) {  // Check to make sure a valid angle has been received (Not -1 and Not 360360)
+
+    int baseAngle = newAngle / 1000;  // First 3 digits of newAngle are given to base servo
+    int beltAngle = newAngle % 1000;  // Last 3 digits of newAngle are given to base servo
+
+    if (baseAngle == beltAngle) { // If both angles are the same then the servos will reach their destinations at the same time
+      baseServo.write(baseAngle);
+      beltServo.write(beltAngle);
+      delay(500);
+      tone(19, 3000); // Assign PIN 19 to buzzer, 3 kHz tone, 50% duty by default
+      delay(250); // Play tone for .25 seconds
+      noTone(19);// Stop tone
+    }
+    else {
+      int steps = 5;
+      for (int i = 0; i <= steps; i++) {  // Divides the angles so that both servos reach their destination at the same time
+        int baseStep = map(i, 0, steps, 0, baseAngle);
+        int beltStep = map(i, 0, steps, 0, beltAngle);
+        baseServo.write(baseStep);
+        beltServo.write(beltStep);
+        delay(50);
+      }
+      delay(500);
+      tone(19, 3000); // Assign PIN 19 to buzzer, 3 kHz tone, 50% duty by default
+      delay(250); // Play tone for .25 seconds
+      noTone(19);// Stop tone
+    }
+
+  } 
+  else if (newAngle == 360360) {  // If angle 36360 is recieved, the emergency stop fucntion will be called
+    emergencyStop();
+  }
+}
+
+void emergencyStop() {  // The emergencyStop() function loops indefinately until a new, valid angle is received
+  while (true) {
+
+    int newAngle = receiveAngles();  // Check for new angles
+
+    if (newAngle != 360360) { // Breaks from function when a new, valid angle is received
+      break;
+    }
+  }
+}
+
+int receiveAngles() { // Reads serial inputs from the GUI
+  if (Serial.available()) {
+
+    String input = Serial.readStringUntil('\n');  // Assign serial input to a string
+    input.trim();
+
+    if (input.length() == 6) {  // Checks for valid string length
+      return input.toInt(); // Convert string to int and return
+    }
+  }
+  return -1;
+}
